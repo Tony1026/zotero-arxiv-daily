@@ -6,7 +6,11 @@ import tiktoken
 from openai import OpenAI
 from loguru import logger
 import json
+from time import sleep
 RawPaperItem = TypeVar('RawPaperItem')
+
+LLM_RETRY_NUM = 3
+LLM_RETRY_DELAY = 10
 
 @dataclass
 class Paper:
@@ -57,15 +61,20 @@ class Paper:
         return tldr
     
     def generate_tldr(self, openai_client:OpenAI,llm_params:dict) -> str:
-        try:
-            tldr = self._generate_tldr_with_llm(openai_client,llm_params)
-            self.tldr = tldr
-            return tldr
-        except Exception as e:
-            logger.warning(f"Failed to generate tldr of {self.url}: {e}")
-            tldr = self.abstract
-            self.tldr = tldr
-            return tldr
+        for i in range(LLM_RETRY_NUM):
+            try:
+                tldr = self._generate_tldr_with_llm(openai_client,llm_params)
+                self.tldr = tldr
+                return tldr
+            except Exception as e:
+                if i == LLM_RETRY_NUM - 1:
+                    logger.warning(f"Failed to generate tldr of {self.url}: {e}")
+                    tldr = self.abstract
+                    self.tldr = tldr
+                    return tldr
+                else:
+                    logger.warning(f"Failed to generate tldr of {self.url}: {e}. Retry in {LLM_RETRY_DELAY} seconds.")
+                    sleep(LLM_RETRY_DELAY)
 
     def _generate_affiliations_with_llm(self, openai_client:OpenAI,llm_params:dict) -> Optional[list[str]]:
         if self.full_text is not None:
@@ -95,14 +104,19 @@ class Paper:
             return affiliations
     
     def generate_affiliations(self, openai_client:OpenAI,llm_params:dict) -> Optional[list[str]]:
-        try:
-            affiliations = self._generate_affiliations_with_llm(openai_client,llm_params)
-            self.affiliations = affiliations
-            return affiliations
-        except Exception as e:
-            logger.warning(f"Failed to generate affiliations of {self.url}: {e}")
-            self.affiliations = None
-            return None
+        for i in range(LLM_RETRY_NUM):
+            try:
+                affiliations = self._generate_affiliations_with_llm(openai_client,llm_params)
+                self.affiliations = affiliations
+                return affiliations
+            except Exception as e:
+                if i == LLM_RETRY_NUM - 1:
+                    logger.warning(f"Failed to generate affiliations of {self.url}: {e}")
+                    self.affiliations = None
+                    return None
+                else:
+                    logger.warning(f"Failed to generate affiliations of {self.url}: {e}. Retry in {LLM_RETRY_DELAY} seconds.")
+                    sleep(LLM_RETRY_DELAY)
 @dataclass
 class CorpusPaper:
     title: str

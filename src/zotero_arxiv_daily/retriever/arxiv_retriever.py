@@ -10,8 +10,11 @@ from urllib.request import urlretrieve
 from tqdm import tqdm
 import os
 from loguru import logger
+from time import sleep
 
 PDF_EXTRACT_TIMEOUT = 180
+DOWNLOAD_RETRY_NUM = 3
+DOWNLOAD_RETRY_DELAY = 5
 @register_retriever("arxiv")
 class ArxivRetriever(BaseRetriever):
     def __init__(self, config):
@@ -76,7 +79,19 @@ def extract_text_from_pdf(paper: ArxivResult) -> str | None:
         if paper.pdf_url is None:
             logger.warning(f"No PDF URL available for {paper.title}")
             return None
-        urlretrieve(paper.pdf_url, path)
+        retry_num = DOWNLOAD_RETRY_NUM
+        delay_time = DOWNLOAD_RETRY_DELAY
+        for i in range(retry_num):
+            try:
+                urlretrieve(paper.pdf_url, path)
+                break
+            except Exception as e:
+                if i == retry_num - 1:
+                    logger.warning(f"Failed to download PDF for {paper.title}: {e}")
+                    return None
+                else:
+                    logger.warning(f"Failed to download PDF for {paper.title}: {e}. Retry in {delay_time} seconds.")
+                    sleep(delay_time)
         try:
             full_text = extract_markdown_from_pdf(path)
         except Exception as e:
@@ -91,7 +106,19 @@ def extract_text_from_tar(paper: ArxivResult) -> str | None:
         if source_url is None:
             logger.warning(f"No source URL available for {paper.title}")
             return None
-        urlretrieve(source_url, path)
+        retry_num = DOWNLOAD_RETRY_NUM
+        delay_time = DOWNLOAD_RETRY_DELAY
+        for i in range(retry_num):
+            try:
+                urlretrieve(source_url, path)
+                break
+            except Exception as e:
+                if i == retry_num - 1:
+                    logger.warning(f"Failed to download source for {paper.title}: {e}")
+                    return None
+                else:
+                    logger.warning(f"Failed to download source for {paper.title}: {e}. Retry in {delay_time} seconds.")
+                    sleep(delay_time)
         try:
             file_contents = extract_tex_code_from_tar(path, paper.entry_id)
             if "all" not in file_contents:
