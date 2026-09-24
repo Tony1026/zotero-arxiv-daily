@@ -102,6 +102,23 @@ def test_clean_abstract():
     raw_plain = "Simple abstract without prefix."
     assert arxiv_retriever._clean_abstract(raw_plain) == "Simple abstract without prefix."
 
+    raw_with_html_and_inner_abstract = (
+        "<p>arXiv:2609.22090v1 Announce Type: new \n"
+        "Abstract: In this work, we introduce Abstract: A Benchmark for evaluation.</p>"
+    )
+    assert arxiv_retriever._clean_abstract(raw_with_html_and_inner_abstract) == (
+        "In this work, we introduce Abstract: A Benchmark for evaluation."
+    )
+
+
+def test_parse_entry_time():
+    from datetime import datetime, timezone
+    import time
+    st = time.strptime("2026-09-23 12:30:45", "%Y-%m-%d %H:%M:%S")
+    dt = arxiv_retriever._parse_entry_time(st)
+    assert dt == datetime(2026, 9, 23, 12, 30, 45, tzinfo=timezone.utc)
+    assert arxiv_retriever._parse_entry_time(None) == datetime.min.replace(tzinfo=timezone.utc)
+
 
 def test_extract_authors():
     entry_with_author = SimpleNamespace(author="Alice, Bob, Charlie")
@@ -150,7 +167,10 @@ def test_entry_to_arxiv_result():
     assert result.journal_ref == "Nature"
     assert result.doi == "10.1234/test"
     assert result.published.year == 2026
+    assert result.published.hour == 12
     assert result.updated.year == 2026
+    assert result.updated.hour == 12
+    assert len(result.links) == 3
 
 
 def test_retrieve_raw_papers_cross_list(config, mock_feedparser, monkeypatch):
