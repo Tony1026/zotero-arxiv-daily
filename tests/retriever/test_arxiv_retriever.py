@@ -110,6 +110,14 @@ def test_clean_abstract():
         "In this work, we introduce Abstract: A Benchmark for evaluation."
     )
 
+    raw_with_inequalities = (
+        "<p>arXiv:2609.22090v1 Announce Type: new \n"
+        "Abstract: We prove that x < y > 0 and 0 < a < b under condition C.</p>"
+    )
+    assert arxiv_retriever._clean_abstract(raw_with_inequalities) == (
+        "We prove that x < y > 0 and 0 < a < b under condition C."
+    )
+
 
 def test_parse_entry_time():
     from datetime import datetime, timezone
@@ -172,6 +180,19 @@ def test_entry_to_arxiv_result():
     assert result.updated.hour == 12
     assert len(result.links) == 3
 
+    # Verify authoritative arxiv_primary_category takes precedence over category list order
+    entry_with_primary = SimpleNamespace(
+        id="oai:arXiv.org:2609.22090v1",
+        title="Title",
+        author="Author",
+        summary="Summary",
+        link="https://arxiv.org/abs/2609.22090",
+        tags=[{"term": "cs.AI"}, {"term": "cs.LG"}],
+        arxiv_primary_category={"term": "cs.LG"},
+    )
+    result_with_primary = arxiv_retriever._entry_to_arxiv_result(entry_with_primary)
+    assert result_with_primary.primary_category == "cs.LG"
+
 
 def test_retrieve_raw_papers_cross_list(config, mock_feedparser, monkeypatch):
     monkeypatch.setattr(config.source.arxiv, "include_cross_list", True)
@@ -191,4 +212,26 @@ def test_retrieve_raw_papers_debug_mode(config, mock_feedparser, monkeypatch):
     retriever = ArxivRetriever(config)
     raw = retriever._retrieve_raw_papers()
     assert len(raw) <= 10
+
+
+def test_retrieve_raw_papers_retries_on_http_failure(config, mock_feedparser, monkeypatch):
+    monkeypatch.setattr(arxiv_retriever, "sleep", lambda _: None)
+    calls = []
+
+    def mock_parse_flaky(url):
+        calls.append(url)
+        if len(calls) < 2:
+            return SimpleNamespace(
+                status=500,
+                feed=SimpleNamespace(title="Server Error"),
+                entries=[],
+                bozo=False,
+            )
+        return mock_feedparser
+
+    monkeypatch.setattr(arxiv_retriever.feedparser, "parse", mock_parse_flaky)
+    retriever = ArxivRetriever(config)
+    raw = retriever._retrieve_raw_papers()
+    assert len(calls) == 2
+    assert len(raw) > 0
 
