@@ -118,6 +118,11 @@ def test_clean_abstract():
         "We prove that x < y > 0 and 0 < a < b under condition C."
     )
 
+    raw_with_br = (
+        "<p>arXiv:2609.22090v1 Announce Type: new<br>Abstract: This is the body after br tags.</p>"
+    )
+    assert arxiv_retriever._clean_abstract(raw_with_br) == "This is the body after br tags."
+
 
 def test_parse_entry_time():
     from datetime import datetime, timezone
@@ -192,6 +197,18 @@ def test_entry_to_arxiv_result():
     )
     result_with_primary = arxiv_retriever._entry_to_arxiv_result(entry_with_primary)
     assert result_with_primary.primary_category == "cs.LG"
+
+    # Verify Atom's arxiv_journal_reference field is mapped to journal_ref
+    entry_with_journal_ref = SimpleNamespace(
+        id="oai:arXiv.org:2609.22090v1",
+        title="Title",
+        author="Author",
+        summary="Summary",
+        link="https://arxiv.org/abs/2609.22090",
+        arxiv_journal_reference="Phys. Rev. Lett. 120, 012345 (2025)",
+    )
+    result_with_journal_ref = arxiv_retriever._entry_to_arxiv_result(entry_with_journal_ref)
+    assert result_with_journal_ref.journal_ref == "Phys. Rev. Lett. 120, 012345 (2025)"
 
 
 def test_retrieve_raw_papers_cross_list(config, mock_feedparser, monkeypatch):
